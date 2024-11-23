@@ -1,9 +1,13 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QFileDialog, 
-                            QListWidget, QComboBox, QProgressBar)
+                            QListWidget, QComboBox, QProgressBar, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QPixmap, QImage
 from pdf2image import convert_from_path
+import fitz  # PyMuPDF
+from PIL import Image
+import io
 import os
 
 class PDFConverter(QMainWindow):
@@ -11,6 +15,11 @@ class PDFConverter(QMainWindow):
         super().__init__()
         self.setWindowTitle("PDF转图片工具")
         self.setMinimumSize(800, 600)
+        
+        # 初始化变量
+        self.current_pdf = None
+        self.current_page = 0
+        self.total_pages = 0
         
         # 创建主窗口部件
         main_widget = QWidget()
@@ -53,9 +62,25 @@ class PDFConverter(QMainWindow):
         # 右侧预览区
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        
+        # 预览控制按钮
+        preview_controls = QHBoxLayout()
+        self.prev_btn = QPushButton("上一页")
+        self.next_btn = QPushButton("下一页")
+        self.page_label = QLabel("0/0")
+        preview_controls.addWidget(self.prev_btn)
+        preview_controls.addWidget(self.page_label)
+        preview_controls.addWidget(self.next_btn)
+        right_layout.addLayout(preview_controls)
+        
+        # 滚动预览区
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumHeight(400)
         self.preview_label = QLabel("PDF预览区")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_layout.addWidget(self.preview_label)
+        scroll_area.setWidget(self.preview_label)
+        right_layout.addWidget(scroll_area)
         
         # 添加左右面板到主布局
         layout.addWidget(left_panel, 1)
@@ -66,12 +91,22 @@ class PDFConverter(QMainWindow):
         self.add_files_btn.clicked.connect(self.add_files)
         self.remove_file_btn.clicked.connect(self.remove_file)
         self.convert_btn.clicked.connect(self.start_conversion)
+        self.prev_btn.clicked.connect(self.prev_page)
+        self.next_btn.clicked.connect(self.next_page)
+        self.file_list.itemClicked.connect(self.preview_pdf)
+        
+        # 初始化按钮状态
+        self.prev_btn.setEnabled(False)
+        self.next_btn.setEnabled(False)
         
     def add_file(self):
         file_name, _ = QFileDialog.getOpenFileName(
             self, "选择PDF文件", "", "PDF文件 (*.pdf)")
         if file_name:
             self.file_list.addItem(file_name)
+            # 自动预览第一个添加的文件
+            if self.file_list.count() == 1:
+                self.preview_pdf(self.file_list.item(0))
             
     def add_files(self):
         file_names, _ = QFileDialog.getOpenFileNames(
@@ -82,6 +117,64 @@ class PDFConverter(QMainWindow):
     def remove_file(self):
         for item in self.file_list.selectedItems():
             self.file_list.takeItem(self.file_list.row(item))
+            
+    def preview_pdf(self, item):
+        try:
+            pdf_path = item.text()
+            self.current_pdf = fitz.open(pdf_path)
+            self.total_pages = len(self.current_pdf)
+            self.current_page = 0
+            self.update_preview()
+            
+            # 更新页面控制按钮状态
+            self.prev_btn.setEnabled(False)
+            self.next_btn.setEnabled(self.total_pages > 1)
+            self.page_label.setText(f"1/{self.total_pages}")
+        except Exception as e:
+            self.preview_label.setText(f"预览失败: {str(e)}")
+            
+    def update_preview(self):
+        if self.current_pdf is None:
+            return
+            
+        # 获取当前页面
+        page = self.current_pdf[self.current_page]
+        
+        # 将页面渲染为图像
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+        
+        # 转换为QImage
+        img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
+        
+        # 创建QPixmap并设置到预览标签
+        pixmap = QPixmap.fromImage(img)
+        
+        # 调整图像大小以适应预览区域
+        scaled_pixmap = pixmap.scaled(self.preview_label.size(), 
+                                    Qt.AspectRatioMode.KeepAspectRatio, 
+                                    Qt.TransformationMode.SmoothTransformation)
+        
+        self.preview_label.setPixmap(scaled_pixmap)
+        self.page_label.setText(f"{self.current_page + 1}/{self.total_pages}")
+        
+    def prev_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_preview()
+            self.next_btn.setEnabled(True)
+            self.prev_btn.setEnabled(self.current_page > 0)
+            
+    def next_page(self):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_preview()
+            self.prev_btn.setEnabled(True)
+            self.next_btn.setEnabled(self.current_page < self.total_pages - 1)
+            
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'current_pdf') and self.current_pdf:
+            self.update_preview()
             
     def start_conversion(self):
         # 这里将实现转换功能

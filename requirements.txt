@@ -1,2 +1,4 @@
 PyQt6
-pdf2image 
+pdf2image
+PyMuPDF
+Pillow
