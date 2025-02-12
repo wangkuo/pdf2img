@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { message, Upload, InputNumber, Button, Card } from 'ant-design-vue';
+import { InboxOutlined } from '@ant-design/icons-vue';
 import type { UploadProps } from 'ant-design-vue';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -148,7 +149,13 @@ async function convertPdfToImages() {
     <Card title="PDF转图片工具" class="converter-card">
       <div class="upload-section">
         <Upload v-bind="uploadProps" class="uploader" @remove="handleRemove">
-          <Button type="primary" title="选择PDF文件">选择PDF文件</Button>
+          <div class="upload-drag-area">
+            <p class="upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p class="upload-text">点击或拖拽PDF文件到此区域</p>
+            <p class="upload-hint">支持单个或多个PDF文件</p>
+          </div>
         </Upload>
         <div class="scale-setting">
           <span>缩放比例：</span>
@@ -223,9 +230,46 @@ async function convertPdfToImages() {
 
 .upload-section {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
+  gap: 20px;
   margin-bottom: 20px;
+}
+
+.uploader {
+  width: 100%;
+  max-width: 600px;
+}
+
+.upload-drag-area {
+  padding: 32px;
+  background: #fafafa;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  text-align: center;
+  transition: border-color 0.3s;
+  cursor: pointer;
+}
+
+.upload-drag-area:hover {
+  border-color: #1890ff;
+}
+
+.upload-drag-icon {
+  margin-bottom: 16px;
+  font-size: 48px;
+  color: #40a9ff;
+}
+
+.upload-text {
+  margin: 0 0 8px;
+  color: rgba(0, 0, 0, 0.85);
+  font-size: 16px;
+}
+
+.upload-hint {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
 }
 
 .scale-setting {
