@@ -128,8 +128,8 @@ async function convertPdfToImages() {
         link.href = image;
         // 如果PDF只有一页，则不添加页码到文件名
         const fileName = pdf.numPages === 1
-          ? `${file.name.replace('.pdf', '')}.png`
-          : `${file.name.replace('.pdf', '')}_page${pageNum}.png`;
+          ? `${file.name.replace(/\.pdf$/i, '')}.png`
+          : `${file.name.replace(/\.pdf$/i, '')}_page${pageNum}.png`;
         link.download = fileName;
         link.click();
       }
