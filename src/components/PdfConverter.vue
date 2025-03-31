@@ -20,7 +20,7 @@ const totalPages = ref(0);
 const scale = ref(2.5);
 const converting = ref(false);
 const previewCanvas = ref<HTMLCanvasElement | null>(null);
-const currentPdfIndex = ref(0);
+const currentPdfIndex = ref(-1); // 初始化为-1表示无选中项
 
 // 文件上传配置
 const uploadProps: UploadProps = {
@@ -29,9 +29,6 @@ const uploadProps: UploadProps = {
   fileList: [],
   beforeUpload: (file) => {
     pdfFiles.value.push(file);
-    // 自动预览最新上传的文件
-    const fileIndex = pdfFiles.value.length - 1;
-    previewPdf(fileIndex);
     return false;
   }
 };
@@ -41,10 +38,8 @@ const handleRemove = (file: any) => {
   const index = pdfFiles.value.findIndex(f => f.name === file.name);
   if (index > -1) {
     pdfFiles.value.splice(index, 1);
-    // 如果还有文件，预览最后一个文件
-    if (pdfFiles.value.length > 0) {
-      previewPdf(pdfFiles.value.length - 1);
-    } else {
+    // 移除文件后不自动预览
+    if (pdfFiles.value.length === 0) {
       previewVisible.value = false;
     }
   }
@@ -52,7 +47,11 @@ const handleRemove = (file: any) => {
 
 // 预览PDF
 async function previewPdf(fileIndex: number = 0, pageNum: number = 1) {
-  if (!pdfFiles.value[fileIndex]) return;
+  // 如果传入的fileIndex为-1，表示取消预览
+  if (fileIndex === -1 || !pdfFiles.value[fileIndex]) {
+    previewVisible.value = false;
+    return;
+  }
   
   try {
     const arrayBuffer = await pdfFiles.value[fileIndex].arrayBuffer();
@@ -97,6 +96,7 @@ async function convertPdfToImages() {
 
   converting.value = true;
   try {
+    // 串行处理每个文件
     for (let fileIndex = 0; fileIndex < pdfFiles.value.length; fileIndex++) {
       const file = pdfFiles.value[fileIndex];
       const arrayBuffer = await file.arrayBuffer();
@@ -106,6 +106,7 @@ async function convertPdfToImages() {
         cMapPacked
       }).promise;
 
+      // 串行处理每一页
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale: scale.value });
@@ -117,6 +118,7 @@ async function convertPdfToImages() {
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
+        // 等待当前页面渲染完成
         await page.render({
           canvasContext: context,
           viewport: viewport
@@ -126,13 +128,17 @@ async function convertPdfToImages() {
         const image = canvas.toDataURL('image/png');
         const link = document.createElement('a');
         link.href = image;
-        // 如果PDF只有一页，则不添加页码到文件名
         const fileName = pdf.numPages === 1
           ? `${file.name.replace(/\.pdf$/i, '')}.png`
           : `${file.name.replace(/\.pdf$/i, '')}_page${pageNum}.png`;
         link.download = fileName;
         link.click();
+
+        // 清理资源
+        canvas.remove();
       }
+      // 等待一小段时间，让浏览器有时间处理下载
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     message.success('转换完成');
   } catch (error) {
